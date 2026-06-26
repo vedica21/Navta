@@ -30,7 +30,7 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo Section */}
           <Link to="/" className="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-            <GraduationCap className="h-7 w-7 text-primary-500" />
+            <img src="/logo.png" alt="Navta Logo" className="h-8 w-8 object-contain" />
             <span className="bg-gradient-to-r from-primary-500 to-indigo-600 dark:from-primary-400 dark:to-indigo-400 bg-clip-text text-transparent">
               Navta
             </span>

@@ -45,8 +45,8 @@ export default function Login() {
       <Card className="w-full max-w-md p-8 border border-slate-100 dark:border-slate-800/40 relative shadow-lg">
         {/* Header Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-500 text-white shadow-md shadow-primary-500/20 mb-3">
-            <GraduationCap className="h-6 w-6" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-md shadow-primary-500/20 mb-3 bg-white dark:bg-slate-800">
+            <img src="/logo.png" alt="Navta Logo" className="h-8 w-8 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Welcome Back</h2>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Log in to resume your learning streaks</p>
