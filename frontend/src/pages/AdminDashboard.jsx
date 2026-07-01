@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { adminAPI } from '../utils/api';
+import { adminAPI, contentAPI } from '../utils/api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import {
@@ -12,15 +13,30 @@ import {
   TrendingUp,
   Trash2,
   Check,
-  X
+  X,
+  BookOpen
 } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeSection, setActiveSection] = useState('stats'); // 'stats', 'users', 'subject', 'reward'
+  const [activeSection, setActiveSection] = useState('stats'); // 'stats', 'users', 'studyMaterial', 'reward'
+  
+  // Student Edit State
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editCoins, setEditCoins] = useState('');
+  const [editXp, setEditXp] = useState('');
+  const [editLevel, setEditLevel] = useState('');
+
+  // User Form
+  const [uName, setUName] = useState('');
+  const [uEmail, setUEmail] = useState('');
+  const [uPassword, setUPassword] = useState('');
+  const [uRole, setURole] = useState('student');
 
   // Subject Form
   const [subName, setSubName] = useState('');
@@ -42,6 +58,9 @@ export default function AdminDashboard() {
 
       const usersRes = await adminAPI.getUsers();
       setUsers(usersRes.data || []);
+      
+      const subRes = await contentAPI.getSubjects();
+      setSubjects(subRes.data || []);
     } catch (err) {
       console.error('Failed to load admin dashboard:', err);
     } finally {
@@ -52,6 +71,15 @@ export default function AdminDashboard() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const hash = location.hash.replace('#', '');
+    if (hash && ['stats', 'users', 'studyMaterial', 'reward'].includes(hash)) {
+      setActiveSection(hash);
+    } else if (!hash) {
+      setActiveSection('stats');
+    }
+  }, [location.hash]);
 
   const handleToggleVerify = async (u) => {
     try {
@@ -74,6 +102,46 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddUser = async (e) => {
+    e.preventDefault();
+    try {
+      await adminAPI.createUser({
+        name: uName,
+        email: uEmail,
+        password: uPassword,
+        role: uRole
+      });
+      alert('User created successfully!');
+      setUName('');
+      setUEmail('');
+      setUPassword('');
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      const payload = {};
+      if (editCoins !== '') payload.coins = Number(editCoins);
+      if (editXp !== '') payload.xp = Number(editXp);
+      if (editLevel !== '') payload.level = Number(editLevel);
+      
+      await adminAPI.updateStudentProfile(editingStudent._id || editingStudent.id, payload);
+      alert('Student account updated successfully!');
+      setEditingStudent(null);
+      setEditCoins('');
+      setEditXp('');
+      setEditLevel('');
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
   const handleAddSubject = async (e) => {
     e.preventDefault();
     try {
@@ -87,6 +155,17 @@ export default function AdminDashboard() {
       setSubName('');
       setSubCode('');
       setSubDesc('');
+      fetchData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteSubject = async (subId) => {
+    if (!window.confirm('Are you sure you want to delete this subject?')) return;
+    try {
+      await adminAPI.deleteSubject(subId);
+      alert('Subject deleted successfully.');
       fetchData();
     } catch (err) {
       alert(err.message);
@@ -163,14 +242,16 @@ export default function AdminDashboard() {
         {[
           { id: 'stats', label: 'Overview Metrics', icon: TrendingUp },
           { id: 'users', label: 'User Auditing', icon: Users },
-          { id: 'subject', label: 'Add Subject', icon: PlusSquare },
+          { id: 'studyMaterial', label: 'Study Material', icon: BookOpen },
           { id: 'reward', label: 'Reward Catalog', icon: Award }
         ].map((tab) => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveSection(tab.id)}
+              onClick={() => {
+                window.location.hash = tab.id;
+              }}
               className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl border transition-all ${
                 activeSection === tab.id
                   ? 'bg-primary-600 border-primary-600 text-white shadow-md shadow-primary-500/10'
@@ -223,7 +304,38 @@ export default function AdminDashboard() {
 
       {/* User Auditing Section */}
       {activeSection === 'users' && (
-        <Card title="User Registry Audit Log" subtitle="Modify user roles, trigger verification states, or delete profiles">
+        <div className="space-y-6">
+          <Card title="Add New User" subtitle="Create a new student or teacher account">
+            <form onSubmit={handleAddUser} className="space-y-4 mt-4 max-w-xl">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Name</label>
+                  <input type="text" required value={uName} onChange={(e) => setUName(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Email</label>
+                  <input type="email" required value={uEmail} onChange={(e) => setUEmail(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Password</label>
+                  <input type="password" required value={uPassword} onChange={(e) => setUPassword(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">Role</label>
+                  <select value={uRole} onChange={(e) => setURole(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none">
+                    <option value="student">Student</option>
+                    <option value="teacher">Teacher</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <Button type="submit" icon={PlusSquare}>Create User</Button>
+            </form>
+          </Card>
+
+          <Card title="User Registry Audit Log" subtitle="Modify user roles, trigger verification states, or delete profiles">
           <div className="overflow-x-auto mt-4">
             <table className="w-full text-left text-sm">
               <thead>
@@ -259,13 +371,24 @@ export default function AdminDashboard() {
                       </button>
                     </td>
                     <td className="py-3.5 text-right">
-                      <button
-                        onClick={() => handleDeleteUser(u._id || u.id)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl"
-                        title="Delete User"
-                      >
-                        <Trash2 className="w-4.5 h-4.5" />
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        {u.role === 'student' && (
+                          <button
+                            onClick={() => setEditingStudent(u)}
+                            className="text-primary-500 hover:text-primary-700 transition-colors p-1.5 hover:bg-primary-50 dark:hover:bg-primary-950/20 rounded-xl"
+                            title="Manage Account"
+                          >
+                            <Settings className="w-4.5 h-4.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteUser(u._id || u.id)}
+                          className="text-red-500 hover:text-red-700 transition-colors p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl"
+                          title="Delete User"
+                        >
+                          <Trash2 className="w-4.5 h-4.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -273,11 +396,79 @@ export default function AdminDashboard() {
             </table>
           </div>
         </Card>
+        
+        {editingStudent && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+            <Card className="w-full max-w-md relative" title={`Manage Student: ${editingStudent.name}`}>
+              <button onClick={() => setEditingStudent(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+              <form onSubmit={handleUpdateStudent} className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Update Coins (Leave blank to keep current)</label>
+                  <input type="number" value={editCoins} onChange={(e) => setEditCoins(e.target.value)} placeholder="e.g. 500" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Update XP (Leave blank to keep current)</label>
+                  <input type="number" value={editXp} onChange={(e) => setEditXp(e.target.value)} placeholder="e.g. 1500" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-2">Update Level (Leave blank to keep current)</label>
+                  <input type="number" value={editLevel} onChange={(e) => setEditLevel(e.target.value)} placeholder="e.g. 5" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 dark:bg-slate-950" />
+                </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button type="button" variant="secondary" onClick={() => setEditingStudent(null)}>Cancel</Button>
+                  <Button type="submit">Save Changes</Button>
+                </div>
+              </form>
+            </Card>
+          </div>
+        )}
+        </div>
       )}
 
-      {/* Add Subject Section */}
-      {activeSection === 'subject' && (
-        <Card title="Add Subject Module" subtitle="Create core classes to categorize quizzes and notes">
+      {/* Study Material Section */}
+      {activeSection === 'studyMaterial' && (
+        <div className="space-y-6">
+          <Card title="Manage Subjects" subtitle="View and delete existing subjects">
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">
+                    <th className="pb-3">Code</th>
+                    <th className="pb-3">Name</th>
+                    <th className="pb-3">Category</th>
+                    <th className="pb-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-slate-700 dark:text-slate-300">
+                  {subjects.map((s) => (
+                    <tr key={s._id}>
+                      <td className="py-3.5 font-bold text-primary-500">{s.code}</td>
+                      <td className="py-3.5 font-semibold text-slate-900 dark:text-white">{s.name}</td>
+                      <td className="py-3.5">{s.category}</td>
+                      <td className="py-3.5 text-right">
+                        <button
+                          onClick={() => handleDeleteSubject(s._id)}
+                          className="text-red-500 hover:text-red-700 transition-colors p-1.5 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl"
+                          title="Delete Subject"
+                        >
+                          <Trash2 className="w-4.5 h-4.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {subjects.length === 0 && (
+                    <tr>
+                      <td colSpan="4" className="py-4 text-center text-slate-500">No subjects found.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card title="Add Subject Module" subtitle="Create core classes to categorize quizzes and notes">
           <form onSubmit={handleAddSubject} className="space-y-4 mt-4 max-w-xl">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -335,6 +526,7 @@ export default function AdminDashboard() {
             <Button type="submit" icon={PlusSquare}>Create Subject</Button>
           </form>
         </Card>
+        </div>
       )}
 
       {/* Add Reward Store Section */}

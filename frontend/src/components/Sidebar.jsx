@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard,
@@ -17,6 +17,7 @@ import {
 
 export default function Sidebar() {
   const { user } = useAuth();
+  const location = useLocation();
   if (!user) return null;
 
   // Student Links
@@ -40,12 +41,11 @@ export default function Sidebar() {
     { to: '/settings', label: 'Settings', icon: Settings }
   ];
 
-  // Admin Links
   const adminLinks = [
     { to: '/admin', label: 'Platform Stats', icon: LayoutDashboard },
     { to: '/admin', label: 'User Audits', icon: Users, hash: '#users' },
-    { to: '/admin', label: 'Add Subjects', icon: PlusSquare, hash: '#subjects' },
-    { to: '/admin', label: 'Reward Store', icon: Award, hash: '#rewards' },
+    { to: '/admin', label: 'Study Material', icon: BookOpen, hash: '#studyMaterial' },
+    { to: '/admin', label: 'Reward Store', icon: Award, hash: '#reward' },
     { to: '/settings', label: 'Settings', icon: Settings }
   ];
 
@@ -64,18 +64,27 @@ export default function Sidebar() {
           const Icon = link.icon;
           const targetUrl = link.to + (link.hash || '');
           
+          let isActive = false;
+          if (link.hash) {
+            isActive = location.pathname === link.to && location.hash === link.hash;
+          } else {
+            // For dashboard/admin base routes, active only if no hash
+            if (link.to === '/admin' || link.to === '/dashboard' || link.to === '/teacher') {
+              isActive = location.pathname === link.to && !location.hash;
+            } else {
+              isActive = location.pathname.startsWith(link.to);
+            }
+          }
+          
           return (
             <NavLink
               key={index}
               to={targetUrl}
-              end={!link.hash}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                  isActive
-                    ? 'bg-primary-500 text-white shadow-md shadow-primary-500/10'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
-                }`
-              }
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 cursor-pointer ${
+                isActive
+                  ? 'bg-primary-500 text-white shadow-md shadow-primary-500/10'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white'
+              }`}
             >
               <Icon className="w-4.5 h-4.5" />
               <span>{link.label}</span>

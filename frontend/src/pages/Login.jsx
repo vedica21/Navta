@@ -1,17 +1,71 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import { GraduationCap, Mail, Lock, AlertCircle } from 'lucide-react';
 
+const GOOGLE_CLIENT_ID = '936476255415-6lglsb7amgin8bk7h66g0u29vjmh24vv.apps.googleusercontent.com';
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const { login } = useAuth();
+  const { googleLogin, login } = useAuth();
   const navigate = useNavigate();
+  const googleBtnRef = useRef(null);
+  const googleInitialized = useRef(false);
+
+  const navigateByRole = useCallback((user) => {
+    if (user.role === 'admin') {
+      navigate('/admin');
+    } else if (user.role === 'teacher') {
+      navigate('/teacher');
+    } else {
+      navigate('/dashboard');
+    }
+  }, [navigate]);
+
+  useEffect(() => {
+    if (googleInitialized.current) return;
+
+    const initGoogle = () => {
+      if (window.google?.accounts?.id && googleBtnRef.current && !googleInitialized.current) {
+        googleInitialized.current = true;
+
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: async (response) => {
+            setErrorMsg('');
+            try {
+              const loggedUser = await googleLogin(response.credential);
+              navigateByRole(loggedUser);
+            } catch (err) {
+              setErrorMsg(err.message || 'Google sign-in failed.');
+            }
+          },
+        });
+
+        // Render the official Google button inside our container
+        window.google.accounts.id.renderButton(googleBtnRef.current, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'continue_with',
+          shape: 'pill',
+          width: googleBtnRef.current.offsetWidth || 400,
+        });
+      }
+    };
+
+    // Try immediately
+    initGoogle();
+
+    // Retry after script loads (only if not yet initialized)
+    const timer = setTimeout(initGoogle, 1500);
+    return () => clearTimeout(timer);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,13 +78,7 @@ export default function Login() {
     setErrorMsg('');
     try {
       const loggedUser = await login(email, password);
-      if (loggedUser.role === 'admin') {
-        navigate('/admin');
-      } else if (loggedUser.role === 'teacher') {
-        navigate('/teacher');
-      } else {
-        navigate('/dashboard');
-      }
+      navigateByRole(loggedUser);
     } catch (err) {
       setErrorMsg(err.message || 'Invalid email or password.');
     } finally {
@@ -46,7 +94,7 @@ export default function Login() {
         {/* Header Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl shadow-md shadow-primary-500/20 mb-3 bg-white dark:bg-slate-800">
-            <img src="/logo.png" alt="Navta Logo" className="h-8 w-8 object-contain" />
+            <img src="/favicon.svg.png" alt="Navta Logo" className="h-8 w-8 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Welcome Back</h2>
           <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Log in to resume your learning streaks</p>
@@ -59,6 +107,20 @@ export default function Login() {
             <span>{errorMsg}</span>
           </div>
         )}
+
+        {/* Google Sign-In Button — rendered by Google Identity Services */}
+        <div
+          ref={googleBtnRef}
+          id="google-signin-btn"
+          className="w-full flex items-center justify-center [&>div]:!w-full"
+        />
+
+        {/* Divider */}
+        <div className="flex items-center gap-3 my-6">
+          <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
+          <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">or</span>
+          <div className="flex-1 h-px bg-slate-200/70 dark:bg-slate-700/50" />
+        </div>
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-5">

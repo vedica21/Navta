@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -220,6 +220,50 @@ const mockAPI = {
 
     forgotPassword: async () => {
       return { success: true, message: 'Reset link sent' };
+    },
+
+    googleLogin: async (credential) => {
+      // In mock mode, simulate a Google user
+      const db = getMockDB();
+      const mockGoogleEmail = 'google.user@gmail.com';
+      const mockGoogleName = 'Google User';
+
+      let user = db.users.find(u => u.email === mockGoogleEmail);
+
+      if (!user) {
+        user = {
+          id: 'u_google_' + Date.now(),
+          name: mockGoogleName,
+          email: mockGoogleEmail,
+          password: null,
+          role: 'student',
+          isVerified: true,
+          googleId: 'mock_google_id'
+        };
+        db.users.push(user);
+        db.students[user.id] = {
+          user: user.id,
+          coins: 100,
+          xp: 150,
+          level: 1,
+          stream: 'General',
+          badges: [{ name: 'Welcome Aboard', icon: 'award', earnedAt: new Date().toISOString() }],
+          rewardsRedeemed: []
+        };
+        db.streaks[user.id] = {
+          user: user.id,
+          currentStreak: 1,
+          longestStreak: 1,
+          lastActiveDate: new Date().toISOString()
+        };
+        saveMockDB(db);
+      }
+
+      return {
+        success: true,
+        token: 'mock_jwt_token_' + user.id,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role, isVerified: user.isVerified }
+      };
     }
   },
 
@@ -657,6 +701,29 @@ const mockAPI = {
 
   // Admin Routes
   admin: {
+    createUser: async (data) => {
+      const db = getMockDB();
+      const userExists = db.users.find(u => u.email === data.email);
+      if (userExists) throw new Error('User already exists');
+
+      const newUser = {
+        id: 'u_' + Date.now(),
+        name: data.name,
+        email: data.email,
+        password: data.password || 'password123',
+        role: data.role || 'student',
+        isVerified: true
+      };
+      db.users.push(newUser);
+
+      if (newUser.role === 'student') {
+        db.students[newUser.id] = { user: newUser.id, coins: 0, xp: 0, level: 1, badges: [], rewardsRedeemed: [] };
+      } else if (newUser.role === 'teacher') {
+        db.teachers[newUser.id] = { user: newUser.id, qualification: 'Qualified Educator', bio: '', subjects: [] };
+      }
+      saveMockDB(db);
+      return { success: true, data: newUser };
+    },
     getUsers: async () => {
       const db = getMockDB();
       return { success: true, data: db.users };
@@ -672,15 +739,29 @@ const mockAPI = {
 
       if (data.role && data.role !== user.role) {
         user.role = data.role;
-        if (role === 'student' && !db.students[userId]) {
+        if (data.role === 'student' && !db.students[userId]) {
           db.students[userId] = { user: userId, coins: 0, xp: 0, level: 1, badges: [], rewardsRedeemed: [] };
-        } else if (role === 'teacher' && !db.teachers[userId]) {
+        } else if (data.role === 'teacher' && !db.teachers[userId]) {
           db.teachers[userId] = { user: userId, qualification: 'Qualified Educator', bio: '', subjects: [] };
         }
       }
       db.users[idx] = user;
       saveMockDB(db);
       return { success: true, data: user };
+    },
+    updateStudentProfile: async (userId, data) => {
+      const db = getMockDB();
+      if (!db.students[userId]) throw new Error('Student profile not found');
+      
+      const student = db.students[userId];
+      if (data.coins !== undefined) student.coins = data.coins;
+      if (data.xp !== undefined) student.xp = data.xp;
+      if (data.level !== undefined) student.level = data.level;
+      if (data.stream !== undefined) student.stream = data.stream;
+      
+      db.students[userId] = student;
+      saveMockDB(db);
+      return { success: true, data: student };
     },
     deleteUser: async (userId) => {
       const db = getMockDB();
@@ -702,6 +783,30 @@ const mockAPI = {
       db.subjects.push(newSubject);
       saveMockDB(db);
       return { success: true, data: newSubject };
+    },
+    deleteSubject: async (id) => {
+      const db = getMockDB();
+      db.subjects = db.subjects.filter(s => s._id !== id);
+      saveMockDB(db);
+      return { success: true };
+    },
+    deleteChapter: async (id) => {
+      const db = getMockDB();
+      db.chapters = db.chapters.filter(c => c._id !== id);
+      saveMockDB(db);
+      return { success: true };
+    },
+    deleteNote: async (id) => {
+      const db = getMockDB();
+      db.notes = db.notes.filter(n => n._id !== id);
+      saveMockDB(db);
+      return { success: true };
+    },
+    deletePYQ: async (id) => {
+      const db = getMockDB();
+      db.pyqs = db.pyqs.filter(p => p._id !== id);
+      saveMockDB(db);
+      return { success: true };
     },
     createReward: async (data) => {
       const db = getMockDB();
@@ -762,6 +867,7 @@ const executeRequest = async (requestPromise, mockFallbackFn) => {
 export const authAPI = {
   register: (data) => executeRequest(api.post('/auth/register', data), () => mockAPI.auth.register(data)),
   login: (data) => executeRequest(api.post('/auth/login', data), () => mockAPI.auth.login(data)),
+  googleLogin: (credential) => executeRequest(api.post('/auth/google', { credential }), () => mockAPI.auth.googleLogin(credential)),
   getMe: () => executeRequest(api.get('/auth/me'), () => mockAPI.auth.me()),
   verifyEmail: () => executeRequest(api.post('/auth/verify-email'), () => mockAPI.auth.verifyEmail()),
   forgotPassword: (email) => executeRequest(api.post('/auth/forgot-password', { email }), () => mockAPI.auth.forgotPassword())
@@ -798,10 +904,16 @@ export const teacherAPI = {
 };
 
 export const adminAPI = {
+  createUser: (data) => executeRequest(api.post('/admin/users', data), () => mockAPI.admin.createUser(data)),
   getUsers: () => executeRequest(api.get('/admin/users'), () => mockAPI.admin.getUsers()),
   updateUser: (userId, data) => executeRequest(api.put(`/admin/users/${userId}`, data), () => mockAPI.admin.updateUser(userId, data)),
+  updateStudentProfile: (userId, data) => executeRequest(api.put(`/admin/students/${userId}`, data), () => mockAPI.admin.updateStudentProfile(userId, data)),
   deleteUser: (userId) => executeRequest(api.delete(`/admin/users/${userId}`), () => mockAPI.admin.deleteUser(userId)),
   createSubject: (data) => executeRequest(api.post('/admin/subjects', data), () => mockAPI.admin.createSubject(data)),
+  deleteSubject: (id) => executeRequest(api.delete(`/admin/subjects/${id}`), () => mockAPI.admin.deleteSubject(id)),
+  deleteChapter: (id) => executeRequest(api.delete(`/admin/chapters/${id}`), () => mockAPI.admin.deleteChapter(id)),
+  deleteNote: (id) => executeRequest(api.delete(`/admin/notes/${id}`), () => mockAPI.admin.deleteNote(id)),
+  deletePYQ: (id) => executeRequest(api.delete(`/admin/pyqs/${id}`), () => mockAPI.admin.deletePYQ(id)),
   createReward: (data) => executeRequest(api.post('/admin/rewards', data), () => mockAPI.admin.createReward(data)),
   getDashboardStats: () => executeRequest(api.get('/admin/dashboard-stats'), () => mockAPI.admin.getDashboardStats())
 };

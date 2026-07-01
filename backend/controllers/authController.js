@@ -3,7 +3,9 @@ const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
 const Streak = require('../models/Streak');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 // Helper to sign JWT token
 const getSignedToken = (id) => {
   return jwt.sign(
@@ -198,5 +200,103 @@ exports.forgotPassword = async (req, res, next) => {
     res.status(200).json({ success: true, message: 'Reset password link sent (simulated)' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Authenticate with Google OAuth
+// @route   POST /api/auth/google
+// @access  Public
+exports.googleAuth = async (req, res, next) => {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ success: false, message: 'Google credential is required' });
+    }
+
+    let payload;
+
+    try {
+      // Try strict verification first
+      const ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+      payload = ticket.getPayload();
+    } catch (verifyErr) {
+      // Handle clock skew — "Token used too early" error
+      // Decode the JWT payload manually and verify essential claims
+      if (verifyErr.message && verifyErr.message.includes('Token used too early')) {
+        const parts = credential.split('.');
+        if (parts.length !== 3) {
+          return res.status(401).json({ success: false, message: 'Invalid Google token format' });
+        }
+
+        // Decode the payload (base64url)
+        const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        payload = JSON.parse(Buffer.from(base64Payload, 'base64').toString('utf-8'));
+
+        // Verify essential claims manually
+        const CLOCK_TOLERANCE = 5 * 60; // 5 minutes tolerance
+        const now = Math.floor(Date.now() / 1000);
+
+        if (payload.iss !== 'https://accounts.google.com' && payload.iss !== 'accounts.google.com') {
+          return res.status(401).json({ success: false, message: 'Invalid token issuer' });
+        }
+        if (payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+          return res.status(401).json({ success: false, message: 'Invalid token audience' });
+        }
+        if (payload.exp && now > payload.exp + CLOCK_TOLERANCE) {
+          return res.status(401).json({ success: false, message: 'Token expired' });
+        }
+      } else {
+        throw verifyErr;
+      }
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Check if user already exists by googleId or email
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (user) {
+      // Update googleId and avatar if not already set
+      if (!user.googleId) {
+        user.googleId = googleId;
+      }
+      if (picture && !user.avatar) {
+        user.avatar = picture;
+      }
+      await user.save();
+    } else {
+      // Create a new user (defaults to student role)
+      user = await User.create({
+        name,
+        email,
+        googleId,
+        avatar: picture || '',
+        role: 'student',
+        isVerified: true
+      });
+
+      // Create student profile
+      await Student.create({
+        user: user._id,
+        stream: 'General'
+      });
+
+      // Initialize daily streak
+      await Streak.create({
+        user: user._id,
+        currentStreak: 1,
+        longestStreak: 1,
+        lastActiveDate: new Date()
+      });
+    }
+
+    sendTokenResponse(user, 200, res);
+  } catch (err) {
+    console.error('Google Auth Error:', err.message);
+    res.status(401).json({ success: false, message: 'Google authentication failed' });
   }
 };

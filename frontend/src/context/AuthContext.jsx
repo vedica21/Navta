@@ -51,6 +51,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const googleLogin = async (credential) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await authAPI.googleLogin(credential);
+      localStorage.setItem('token', res.token);
+
+      // Load user profile detail immediately after token is stored
+      const profileRes = await authAPI.getMe();
+      setUser(profileRes.user);
+      setProfile(profileRes.profile);
+      setStreak(profileRes.streak);
+      setLoading(false);
+      return profileRes.user;
+    } catch (err) {
+      setError(err.message || 'Google login failed');
+      setLoading(false);
+      throw err;
+    }
+  };
+
   const register = async (signUpData) => {
     setLoading(true);
     setError(null);
@@ -104,6 +125,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         error,
         login,
+        googleLogin,
         register,
         logout,
         updateProfileStats,

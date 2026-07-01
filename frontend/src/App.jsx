@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 // Layout & Navigation
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
+import Footer from './components/Footer';
 
 // Public Pages
 import Home from './pages/Home';
@@ -34,6 +35,7 @@ function PublicLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+      <Footer />
     </div>
   );
 }
@@ -63,6 +65,7 @@ function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+      <Footer />
     </div>
   );
 }
