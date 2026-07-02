@@ -851,9 +851,10 @@ const executeRequest = async (requestPromise, mockFallbackFn) => {
     const response = await requestPromise;
     return response.data;
   } catch (error) {
-    // If it's a network/connection error, run mock fallback
-    if (!error.response || error.code === 'ERR_NETWORK') {
-      console.warn('Backend server not detected or connection failed. Navta is running in Client-Side Stateful Mockup Mode!');
+    const message = error.response?.data?.message || '';
+    // If it's a network/connection error, OR a database buffering timeout from the backend, run mock fallback
+    if (!error.response || error.code === 'ERR_NETWORK' || message.includes('buffering timed out') || message.includes('MongoDB')) {
+      console.warn('Backend server or database not detected. Navta is running in Client-Side Stateful Mockup Mode!');
       try {
         const mockResult = await mockFallbackFn();
         return mockResult;
@@ -862,8 +863,7 @@ const executeRequest = async (requestPromise, mockFallbackFn) => {
       }
     }
     // Otherwise return standard Axios structured error message
-    const message = error.response?.data?.message || 'Something went wrong';
-    throw new Error(message);
+    throw new Error(message || 'Something went wrong');
   }
 };
 
