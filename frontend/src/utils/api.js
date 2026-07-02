@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://navta-9.onrender.com';
+// Ensure VITE_API_URL properly appends /api if it doesn't already, and fallback to production backend.
+const envUrl = import.meta.env.VITE_API_URL;
+const API_URL = envUrl 
+  ? (envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`) 
+  : 'https://navta-9.onrender.com/api';
 
 const api = axios.create({
   baseURL: API_URL,
